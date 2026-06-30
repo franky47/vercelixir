@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elixir · Live System Metrics</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 76 65'%3E%3Cpath fill='%23fff' d='M37.59.25l36.95 64H.64l36.95-64z'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #000000;
+        --card: #0a0a0a;
+        --card-hover: #0f0f0f;
+        --border: rgba(255, 255, 255, 0.1);
+        --border-strong: rgba(255, 255, 255, 0.16);
+        --fg: #ededed;
+        --gray: #a1a1a1;
+        --muted: #8f8f8f;
+        --faint: #6b6b6b;
+        --blue: #0070f3;
+        --blue-light: #47a8ff;
+        --teal: #00b8a3;
+        --green: #00ca51;
+        --red: #ff5c5c;
+        --amber: #f5a623;
+        --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 24px 64px; }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 32px;
+      }
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .logo {
+        width: 32px; height: 32px;
+        display: grid; place-items: center;
+        color: var(--fg);
+      }
+      .logo svg { width: 26px; height: 26px; }
+      h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+      .sub { color: var(--muted); font-size: 13px; margin-top: 3px; font-family: var(--mono); }
+
+      .status {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--gray);
+        font-family: var(--mono);
+        background: var(--card); border: 1px solid var(--border);
+        padding: 7px 13px; border-radius: 9999px;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); transition: background .15s, box-shadow .15s; }
+      .dot.live { background: var(--green); box-shadow: 0 0 0 4px rgba(0, 202, 81, 0.15); }
+      .dot.down { background: var(--red); box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.15); }
+      .dot.paused { background: var(--amber); box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.15); }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        transition: border-color .15s, background .15s;
+      }
+      .card:hover { border-color: var(--border-strong); background: var(--card-hover); }
+      .card .label {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+        color: var(--muted); margin-bottom: 14px; font-weight: 500;
+      }
+      .value { font-family: var(--mono); font-size: 32px; font-weight: 500; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+      .value .unit { font-size: 15px; color: var(--muted); margin-left: 3px; }
+      .meta { color: var(--muted); font-size: 12px; margin-top: 10px; font-family: var(--mono); }
+
+      .bar { height: 6px; border-radius: 9999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 14px; }
+      .bar > span { display: block; height: 100%; width: 0%; border-radius: 9999px;
+        background: linear-gradient(90deg, var(--blue), var(--teal)); transition: width .4s ease; }
+
+      canvas { width: 100%; height: 52px; display: block; margin-top: 14px; }
+      .span-2 { grid-column: span 2; }
+      @media (max-width: 560px) { .span-2 { grid-column: span 1; } }
+
+      footer { color: var(--faint); font-size: 12px; margin-top: 32px; text-align: center; font-family: var(--mono); }
+      footer code { color: var(--blue-light); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <div class="logo" aria-hidden="true">
+            <svg viewBox="0 0 76 65" fill="currentColor"><path d="M37.59.25l36.95 64H.64l36.95-64z" /></svg>
+          </div>
+          <div>
+            <h1>Live System Metrics</h1>
+            <div class="sub">Elixir · Bandit · WebSocket on Vercel</div>
+          </div>
+        </div>
+        <div class="status"><span id="dot" class="dot"></span><span id="status-text">connecting…</span></div>
+      </header>
+
+      <div class="grid">
+        <div class="card span-2">
+          <div class="label">CPU Utilization</div>
+          <div><span id="cpu" class="value">–<span class="unit">%</span></span></div>
+          <div id="cpu-meta" class="meta">–</div>
+          <canvas id="cpu-spark" width="600" height="52"></canvas>
+        </div>
+
+        <div class="card span-2">
+          <div class="label">System Memory</div>
+          <div><span id="mem-pct" class="value">–<span class="unit">%</span></span></div>
+          <div id="mem-meta" class="meta">–</div>
+          <div class="bar"><span id="mem-bar"></span></div>
+          <canvas id="mem-spark" width="600" height="52"></canvas>
+        </div>
+
+        <div class="card">
+          <div class="label">Load Average</div>
+          <div><span id="load" class="value">–</span></div>
+          <div id="load-meta" class="meta">1m / 5m</div>
+        </div>
+
+        <div class="card">
+          <div class="label">BEAM Processes</div>
+          <div><span id="procs" class="value">–</span></div>
+          <div id="procs-meta" class="meta">of limit</div>
+        </div>
+
+        <div class="card">
+          <div class="label">BEAM Memory</div>
+          <div><span id="beam-mem" class="value">–</span></div>
+          <div class="meta">VM heap total</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Uptime</div>
+          <div><span id="uptime" class="value">–</span></div>
+          <div class="meta">since boot</div>
+        </div>
+      </div>
+
+      <footer>Streaming once per second over <code id="ws-url">ws://…/ws</code></footer>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const HISTORY = 60;
+
+      const fmtBytes = (n) => {
+        if (!n && n !== 0) return "–";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let i = 0;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return `${n.toFixed(n >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
+      };
+
+      const fmtUptime = (ms) => {
+        const s = Math.floor(ms / 1000);
+        const d = Math.floor(s / 86400);
+        const h = Math.floor((s % 86400) / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (d > 0) return `${d}d ${h}h ${m}m`;
+        if (h > 0) return `${h}h ${m}m ${sec}s`;
+        if (m > 0) return `${m}m ${sec}s`;
+        return `${sec}s`;
+      };
+
+      function makeSpark(canvas, color) {
+        const data = [];
+        const ctx = canvas.getContext("2d");
+        return (value) => {
+          data.push(value);
+          if (data.length > HISTORY) data.shift();
+          const dpr = window.devicePixelRatio || 1;
+          const w = canvas.clientWidth;
+          const h = canvas.clientHeight;
+          if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+            canvas.width = Math.round(w * dpr);
+            canvas.height = Math.round(h * dpr);
+          }
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, w, h);
+          if (data.length < 2) return;
+          const max = Math.max(100, ...data);
+          const step = w / (HISTORY - 1);
+          const y = (v) => h - 4 - (v / max) * (h - 8);
+          const x = (i) => i * step;
+          const start = HISTORY - data.length;
+
+          ctx.beginPath();
+          data.forEach((v, i) => {
+            const px = x(start + i), py = y(v);
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          });
+          ctx.lineTo(x(HISTORY - 1), h);
+          ctx.lineTo(x(start), h);
+          ctx.closePath();
+          const grad = ctx.createLinearGradient(0, 0, 0, h);
+          grad.addColorStop(0, color + "40");
+          grad.addColorStop(1, color + "00");
+          ctx.fillStyle = grad;
+          ctx.fill();
+
+          ctx.beginPath();
+          data.forEach((v, i) => {
+            const px = x(start + i), py = y(v);
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          });
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.75;
+          ctx.lineJoin = "round";
+          ctx.stroke();
+        };
+      }
+
+      const cpuSpark = makeSpark($("cpu-spark"), "#0070f3");
+      const memSpark = makeSpark($("mem-spark"), "#00b8a3");
+
+      const STATUS_TEXT = {
+        live: "live",
+        down: "disconnected",
+        paused: "paused · tab hidden",
+        connecting: "connecting…",
+      };
+
+      function setStatus(state) {
+        const cls = state === "live" || state === "down" || state === "paused" ? state : "";
+        $("dot").className = "dot " + cls;
+        $("status-text").textContent = STATUS_TEXT[state] || STATUS_TEXT.connecting;
+      }
+
+      function render(m) {
+        $("cpu").innerHTML = `${m.cpu.utilization.toFixed(1)}<span class="unit">%</span>`;
+        $("cpu-meta").textContent = `${m.cpu.cores} cores · run queue ${m.cpu.run_queue}`;
+        cpuSpark(m.cpu.utilization);
+
+        $("mem-pct").innerHTML = `${m.memory.percent.toFixed(1)}<span class="unit">%</span>`;
+        $("mem-meta").textContent = `${fmtBytes(m.memory.used)} / ${fmtBytes(m.memory.total)} used`;
+        $("mem-bar").style.width = `${Math.min(100, m.memory.percent)}%`;
+        memSpark(m.memory.percent);
+
+        $("load").textContent = `${m.cpu.load_avg_1m.toFixed(2)}`;
+        $("load-meta").textContent = `1m ${m.cpu.load_avg_1m.toFixed(2)} · 5m ${m.cpu.load_avg_5m.toFixed(2)}`;
+
+        $("procs").textContent = m.beam.process_count.toLocaleString();
+        $("procs-meta").textContent = `of ${m.beam.process_limit.toLocaleString()} limit`;
+
+        $("beam-mem").textContent = fmtBytes(m.beam.memory_total);
+        $("uptime").textContent = fmtUptime(m.beam.uptime_ms);
+      }
+
+      let socket = null;
+      let retry = 0;
+      let reconnectTimer = null;
+      let intentionalClose = false;
+
+      function connect() {
+        clearTimeout(reconnectTimer);
+        if (document.hidden) { setStatus("paused"); return; }
+        intentionalClose = false;
+
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const url = `${proto}//${location.host}/ws`;
+        $("ws-url").textContent = url;
+
+        const ws = new WebSocket(url);
+        socket = ws;
+
+        ws.onopen = () => { if (ws === socket) { retry = 0; setStatus("live"); } };
+        ws.onmessage = (e) => {
+          if (ws !== socket) return;
+          try { render(JSON.parse(e.data)); } catch (_) {}
+        };
+        ws.onclose = () => {
+          if (ws !== socket) return;
+          if (intentionalClose) { setStatus("paused"); return; }
+          setStatus("down");
+          retry = Math.min(retry + 1, 6);
+          reconnectTimer = setTimeout(connect, retry * 1000);
+        };
+        ws.onerror = () => ws.close();
+      }
+
+      // Drop the connection while the tab is hidden so the server instance can
+      // scale down (Vercel bills provisioned memory only while a socket is open).
+      function disconnect() {
+        intentionalClose = true;
+        clearTimeout(reconnectTimer);
+        const ws = socket;
+        socket = null;
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) ws.close();
+        setStatus("paused");
+      }
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+          disconnect();
+        } else {
+          retry = 0;
+          connect();
+        }
+      });
+
+      if (document.hidden) setStatus("paused");
+      else connect();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+
+# Build an OTP release on a Debian-based Elixir image, then copy it onto a
+# matching slim runtime so the bundled ERTS stays glibc-compatible.
+#
+# Builder and runner must share the same Debian suite (both bookworm here).
+# For fully reproducible production builds, pin both images by @sha256 digest.
+ARG BUILDER_IMAGE="elixir:1.18-otp-27"
+ARG RUNNER_IMAGE="debian:bookworm-slim"
+
+FROM ${BUILDER_IMAGE} AS builder
+
+RUN apt-get update -y \
+    && apt-get install -y build-essential git \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+RUN mix local.hex --force && mix local.rebar --force
+
+ENV MIX_ENV=prod
+
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only prod
+RUN mix deps.compile
+
+COPY config config
+COPY lib lib
+COPY priv priv
+
+RUN mix compile
+RUN mix release
+
+FROM ${RUNNER_IMAGE}
+
+RUN apt-get update -y \
+    && apt-get install -y libstdc++6 openssl libncurses6 ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=C.UTF-8 LANGUAGE=C.UTF-8 LC_ALL=C.UTF-8 MIX_ENV=prod
+
+# Single-node deploy: no clustering, so drop epmd + the distribution listener
+# (removes attack surface and the hostname-resolution boot dependency).
+ENV RELEASE_DISTRIBUTION=none
+
+WORKDIR /app
+COPY --from=builder --chown=nobody:root /app/_build/prod/rel/metrics_demo ./
+USER nobody
+
+# Vercel routes traffic to $PORT, which defaults to 80.
+ENV PORT=80
+EXPOSE 80
+
+CMD ["/app/bin/metrics_demo", "start"]
