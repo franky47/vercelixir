@@ -58,12 +58,14 @@ docker run --rm -e PORT=8080 -p 8080:8080 metrics-demo
 
 ## Deploy to Vercel
 
-The presence of `Dockerfile.vercel` makes Vercel build and deploy the container.
+`vercel.json` sets `"framework": "container"`, which makes Vercel build the
+`Dockerfile.vercel` image and route traffic to it. Without this the project
+would default to a static deploy and ignore the Dockerfile.
 
 ```sh
-vercel deploy
+vercel deploy --prod
 ```
 
-Ensure **Fluid compute** is enabled for the project (the default for new
-projects) — both Dockerfile deployments and WebSockets require it. The only
-runtime contract is that the server listens on `$PORT`.
+Requires Vercel CLI ≥ 47.2.2. **Fluid compute** must be enabled (the default for
+new projects) — both container deployments and WebSockets run on it. The only
+runtime contract is that the server listens on `$PORT` (defaults to 80).
