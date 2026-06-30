@@ -108,6 +108,67 @@ container on Fluid compute.
   **provisioned** (memory billed) for the life of the connection. When the last
   socket closes and no requests are in flight, the instance **pauses** → $0.
 
+## Fast first paint: the static shell
+
+A cold Fluid container takes **4–5 s to boot** before it can answer the first
+HTTP request. Because LiveView server-renders `/` on that request, first paint is
+held hostage to the cold start (worst on a hard reload). The fix is to serve a
+**static skeleton from Vercel's edge** so paint never waits on the container; the
+live numbers stream in once the socket connects.
+
+You **cannot** just CDN-cache the LiveView dead render: it sets a per-visitor
+session cookie + CSRF token, and Vercel refuses to cache any response with
+`set-cookie`. A *skeleton* has neither, so it caches fine.
+
+- **`GET /` → cookie-less skeleton.** A `serve_static_shell` plug at the front of
+  the `:browser` pipeline short-circuits plain `GET /` with the skeleton and
+  `halt`s *before* `fetch_session`/`protect_from_forgery` run — so no cookie, so
+  Vercel caches it. Headers: `Vercel-CDN-Cache-Control: max-age=…,
+  stale-while-revalidate=…` (edge-only, controls the cache) plus
+  `Cache-Control: public, max-age=0, must-revalidate` (browser revalidates each
+  load; the edge answers instantly). Confirm with `x-vercel-cache: HIT`.
+- **`GET /?boot=1` → real dead render.** The client fetches this, grafts the
+  `[data-phx-main]` container + CSRF meta into the skeleton, and connects. It's a
+  distinct CDN cache key (and uncacheable anyway — it sets the cookie).
+
+### The trap: keep the LiveView mounted at `/`
+
+LiveView signs its session token to the **router path it's mounted at**. The
+obvious-but-wrong design — skeleton at `/`, LiveView at a *separate* path like
+`/app` — mints tokens bound to `/app` while the browser URL is `/`. On join the
+server sees the URL doesn't match the view's route, answers with an
+*unauthorized live_redirect*, and the client **falls back to a full page
+request** → re-grafts → joins → redirects → **a tight reload loop** (hundreds of
+reloads/min; on a metered instance that is a wallet fire).
+
+So mount the LiveView at `/` and gate the skeleton with the `?boot` query
+instead. Same route → tokens bound to `/` → the socket joins with no redirect,
+and the URL never leaves `/` (so reloads stay instant too). As a backstop,
+`app.js` keeps a short sessionStorage **loop-breaker** that aborts after a few
+boots in quick succession.
+
+### What it does and doesn't buy
+
+- **Buys:** first paint is independent of the container — instant chrome from the
+  edge even on a stone-cold instance, and `idle = $0` is preserved (no keep-warm).
+- **Doesn't buy:** the live *data* still waits for the socket to reach a warm
+  container, so on a genuinely cold hit the numbers fill in ~4–5 s after the
+  (instant) skeleton. The first request per deploy also cold-fills the cache;
+  `stale-while-revalidate` then serves stale-but-instant while revalidating.
+
+### Cache freshness across deploys (verify on the platform)
+
+The cached skeleton embeds the **digested** `app.js` URL (prod sets
+`cache_static_manifest`), and `phx-track-static` forces the skeleton and the
+boot render to reference the *same* asset URL — so they can't be split into
+digested/un-digested. This is safe **only if Vercel scopes the CDN cache per
+deployment** (the production alias swaps to a fresh-cache deployment, so a cached
+skeleton never outlives the assets it points at). The research says it does;
+confirm on your first redeploy that an old skeleton isn't served against new
+assets (a stale digest would 404 → stuck skeleton). If a deploy ever shares the
+cache, the fix is to reference `app.js` un-digested in `Layouts.head` (losing
+`phx-track-static`'s auto-reload-on-deploy, but stable across deploys).
+
 ## Cost model
 
 Billing dimensions (Fluid):

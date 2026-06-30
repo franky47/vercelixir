@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <Layouts.head />
+    <style>
+      /* Loading affordances, scoped to the skeleton so they never reach the live
+         view (its render replaces #dash-root on connect). */
+      @keyframes shell-shimmer {
+        /* Travel exactly one tile (background-size is 200%) so the sweep loops
+           seamlessly instead of jumping back. */
+        from { background-position: 200% 0; }
+        to { background-position: 0% 0; }
+      }
+      @keyframes shell-dot {
+        0%, 70%, 100% { opacity: 0.25; }
+        35% { opacity: 1; }
+      }
+      #dash-root .card {
+        background-image: linear-gradient(100deg, var(--card) 30%, #121212 50%, var(--card) 70%);
+        background-size: 200% 100%;
+        animation: shell-shimmer 1.6s linear infinite;
+      }
+      /* Dots stay in the DOM (fixed badge width); only their opacity animates. */
+      #dash-root .status-text::after {
+        content: none;
+      }
+      #dash-root .ellipsis span {
+        animation: shell-dot 1.4s ease-in-out infinite;
+      }
+      #dash-root .ellipsis span:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      #dash-root .ellipsis span:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #dash-root .card {
+          background-image: none;
+          animation: none;
+        }
+        #dash-root .ellipsis span {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="dash-root">
+      <div class="wrap">
+        <header>
+          <div class="brand">
+            <div class="logo" aria-hidden="true">
+              <svg viewBox="0 0 76 65" fill="currentColor">
+                <path d="M37.59.25l36.95 64H.64l36.95-64z" />
+              </svg>
+            </div>
+            <div>
+              <h1>Live System Metrics</h1>
+              <div class="sub">Elixir · Phoenix LiveView on Vercel</div>
+            </div>
+          </div>
+          <div class="status">
+            <span class="dot"></span>
+            <span class="status-text">connecting<span class="ellipsis"><span>.</span><span>.</span><span>.</span></span></span>
+          </div>
+        </header>
+
+        <div class="grid">
+          <div class="card span-2">
+            <div class="label">CPU Utilization</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">— cores</div>
+            <div style="height:52px;margin-top:14px"></div>
+          </div>
+
+          <div class="card span-2">
+            <div class="label">System Memory</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">—</div>
+            <div class="bar"><span></span></div>
+            <div style="height:52px;margin-top:14px"></div>
+          </div>
+
+          <div class="card">
+            <div class="label">Load Average</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">—</div>
+          </div>
+
+          <div class="card">
+            <div class="label">BEAM Processes</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">—</div>
+          </div>
+
+          <div class="card">
+            <div class="label">BEAM Memory</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">total allocated</div>
+          </div>
+
+          <div class="card">
+            <div class="label">Uptime</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">since boot</div>
+          </div>
+        </div>
+
+        <footer>Streaming once per second over <code>Phoenix LiveView</code></footer>
+      </div>
+    </div>
+  </body>
+</html>
