@@ -2,6 +2,47 @@
 <html lang="en">
   <head>
     <Layouts.head />
+    <style>
+      /* Loading affordances, scoped to the skeleton so they never reach the live
+         view (its render replaces #dash-root on connect). */
+      @keyframes shell-shimmer {
+        /* Travel exactly one tile (background-size is 200%) so the sweep loops
+           seamlessly instead of jumping back. */
+        from { background-position: 200% 0; }
+        to { background-position: 0% 0; }
+      }
+      @keyframes shell-dot {
+        0%, 70%, 100% { opacity: 0.25; }
+        35% { opacity: 1; }
+      }
+      #dash-root .card {
+        background-image: linear-gradient(100deg, var(--card) 30%, #121212 50%, var(--card) 70%);
+        background-size: 200% 100%;
+        animation: shell-shimmer 1.6s linear infinite;
+      }
+      /* Dots stay in the DOM (fixed badge width); only their opacity animates. */
+      #dash-root .status-text::after {
+        content: none;
+      }
+      #dash-root .ellipsis span {
+        animation: shell-dot 1.4s ease-in-out infinite;
+      }
+      #dash-root .ellipsis span:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      #dash-root .ellipsis span:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #dash-root .card {
+          background-image: none;
+          animation: none;
+        }
+        #dash-root .ellipsis span {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="dash-root">
@@ -18,7 +59,10 @@
               <div class="sub">Elixir · Phoenix LiveView on Vercel</div>
             </div>
           </div>
-          <div class="status"><span class="dot"></span><span class="status-text"></span></div>
+          <div class="status">
+            <span class="dot"></span>
+            <span class="status-text">connecting<span class="ellipsis"><span>.</span><span>.</span><span>.</span></span></span>
+          </div>
         </header>
 
         <div class="grid">
