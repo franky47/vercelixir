@@ -3,8 +3,8 @@ defmodule MetricsDemoWeb.DashboardLiveTest do
 
   alias MetricsDemoWeb.DashboardLive
 
-  test "GET / renders the dashboard", %{conn: conn} do
-    {:ok, _live, html} = live(conn, ~p"/")
+  test "the live dashboard mounts and renders", %{conn: conn} do
+    {:ok, _live, html} = live(conn, "/?boot=1")
 
     assert html =~ "Live System Metrics"
     assert html =~ "CPU Utilization"

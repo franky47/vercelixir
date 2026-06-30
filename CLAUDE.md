@@ -16,9 +16,16 @@ in `vercel.json`, or it silently does a *static* deploy that 404s every route.
   broadcast of the metrics map), `Metrics` (`:os_mon` + BEAM stats).
 - `lib/metrics_demo_web/` (web) — `Endpoint` (Bandit adapter), `Router`,
   `DashboardLive` (LiveView at `/`; subscribes to `Collector` and re-renders each
-  tick), `Layouts.root` (inline CSS), `HealthController` (`/healthz`).
-- `assets/js/app.js` — `LiveSocket` + a `Spark` canvas hook for the sparklines;
-  drops the socket while the tab is hidden (cost control). Bundled by `esbuild`.
+  tick), `Layouts.head` (shared `<head>` + inline CSS), `PageHTML.shell` (the
+  static skeleton), `HealthController` (`/healthz`).
+- **Static shell for fast first paint.** Plain `GET /` short-circuits in the
+  `serve_static_shell` router plug with a cookie-less, CDN-cacheable skeleton, so
+  Vercel's edge serves first paint without waiting on a cold container. The client
+  then fetches `/?boot=1` (same `/` route → tokens bound to this URL) and grafts
+  the real dead render in. See [elixir-on-vercel.md](./elixir-on-vercel.md).
+- `assets/js/app.js` — boots the static shell (fetch `/?boot=1`, graft, connect),
+  a `Spark` canvas hook for the sparklines, drops the socket while the tab is
+  hidden (cost control), and a sessionStorage loop-breaker. Bundled by `esbuild`.
 - `Dockerfile.vercel` — multi-stage OTP release; runs `mix assets.deploy`;
   listens on `$PORT` (default 80).
 

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <Layouts.head />
+  </head>
+  <body>
+    <div id="dash-root">
+      <div class="wrap">
+        <header>
+          <div class="brand">
+            <div class="logo" aria-hidden="true">
+              <svg viewBox="0 0 76 65" fill="currentColor">
+                <path d="M37.59.25l36.95 64H.64l36.95-64z" />
+              </svg>
+            </div>
+            <div>
+              <h1>Live System Metrics</h1>
+              <div class="sub">Elixir · Phoenix LiveView on Vercel</div>
+            </div>
+          </div>
+          <div class="status"><span class="dot"></span><span class="status-text"></span></div>
+        </header>
+
+        <div class="grid">
+          <div class="card span-2">
+            <div class="label">CPU Utilization</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">— cores</div>
+            <div style="height:52px;margin-top:14px"></div>
+          </div>
+
+          <div class="card span-2">
+            <div class="label">System Memory</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">—</div>
+            <div class="bar"><span></span></div>
+            <div style="height:52px;margin-top:14px"></div>
+          </div>
+
+          <div class="card">
+            <div class="label">Load Average</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">—</div>
+          </div>
+
+          <div class="card">
+            <div class="label">BEAM Processes</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">—</div>
+          </div>
+
+          <div class="card">
+            <div class="label">BEAM Memory</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">total allocated</div>
+          </div>
+
+          <div class="card">
+            <div class="label">Uptime</div>
+            <div><span class="value">—</span></div>
+            <div class="meta">since boot</div>
+          </div>
+        </div>
+
+        <footer>Streaming once per second over <code>Phoenix LiveView</code></footer>
+      </div>
+    </div>
+  </body>
+</html>
