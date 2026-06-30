@@ -1,0 +1,140 @@
+# Authoring Elixir for Vercel
+
+Notes from shipping this repo — a containerized Elixir/OTP app streaming system
+metrics over WebSocket — to Vercel's Dockerfile + WebSocket support, which both
+run on **Fluid compute**.
+
+## TL;DR — the traps that cost time
+
+1. **`Dockerfile.vercel` alone is not enough.** A CLI-created project deploys
+   *statically* and silently ignores the Dockerfile until the project framework
+   is `container`. Symptom: every route 404s with `x-vercel-error: NOT_FOUND`.
+   Fix: commit `vercel.json` → `{ "framework": "container" }`.
+2. **CLI must be ≥ 47.2.2.** Older versions error: *"This endpoint requires
+   version 47.2.2 or later."*
+3. **Memory floor is 2 GB** (Pro). You cannot provision lower. The cost lever is
+   connection-time, not instance size.
+4. The server **must listen on `$PORT`** (defaults to `80`) and bind `0.0.0.0`.
+
+## The app
+
+- **Bandit** as the HTTP/WebSocket server, **WebSockAdapter** + **WebSock** for
+  the socket, **Plug.Router** for routing, **Jason** for encoding.
+- **`:os_mon`** (`:cpu_sup`, `:memsup`) for host CPU/memory — it's part of OTP,
+  so just add `:os_mon` to `extra_applications`. Disable `disksup`/`os_sup` and
+  raise `system_memory_high_watermark` to avoid alarm log noise.
+- One **`Collector` GenServer** samples once per second and broadcasts the
+  encoded payload to sockets via a `:pg` group. Centralising the cadence matters:
+  `:cpu_sup.util/0` reports usage *since its previous call*, so it's only
+  meaningful from a single caller — and you encode each sample once regardless of
+  client count.
+- Read the port from `$PORT` in `config/runtime.exs`; bind `ip: {0,0,0,0}`.
+- WebSocket leaks aren't a concern: `:pg` monitors joined pids and reaps them on
+  exit, so closed sockets clean themselves up.
+
+## Dockerfile.vercel
+
+Multi-stage: build an OTP release on a Debian-based Elixir image, copy onto a
+slim runtime.
+
+- **Match the Debian suite** across builder and runner (both `bookworm` here).
+  The release bundles ERTS (`include_erts: true`), so a glibc mismatch fails at
+  runtime with `GLIBC_… not found`. Pin by `@sha256` digest for reproducibility.
+- **Runtime libs:** `libstdc++6`, `openssl` (pulls `libssl3` for the crypto NIF),
+  `libncurses6` (libtinfo), `ca-certificates`.
+- **`ENV RELEASE_DISTRIBUTION=none`** — single-node deploy, so drop epmd and the
+  distribution listener (removes attack surface and a hostname-resolution boot
+  dependency). Trade-off: `bin/<app> rpc|remote` stop working (they need
+  distribution); fine for production.
+- **`CMD ["/app/bin/<app>", "start"]`** — for a *mix release*, `start` runs in
+  the foreground (unlike rebar3/relx, where `start` daemonises and the container
+  would exit).
+- `:os_mon`'s port programs (`cpu_sup`, `memsup`) ship inside the bundled ERTS,
+  so they work on the slim runtime with no extra packages.
+
+## Making Vercel build the container (the #1 trap)
+
+The CLI has a built-in **"Container" framework** (`slug: container`,
+`useRuntime: @vercel/container`) whose detector is the presence of
+`Dockerfile.vercel` / `Containerfile.vercel`. But detection only *sets* the
+framework at dashboard import — a project created with `vercel link` stores
+`framework: null`, and the build then respects that null and does a zero-config
+**static** deploy: it copies `Dockerfile.vercel` into `.vercel/output/static/`
+as a plain file, `builds` is empty, and every route 404s.
+
+**Durable fix** (survives fresh clones / new projects):
+
+```json
+{ "$schema": "https://openapi.vercel.sh/vercel.json", "framework": "container" }
+```
+
+**One-off fix:**
+`PATCH /v9/projects/<id>?teamId=<team>` with `{"framework":"container"}`.
+
+> The `services` block in `vercel.json` looks like another route (it has a
+> `memory` field in the CLI's internal schema), but Vercel's server-side
+> validator **rejects** `type`, `routePrefix`, and `memory` under it. Only the
+> top-level `framework` key works for a single container.
+
+A correct deploy runs **buildah** on the build machine (pulls the base image,
+runs your Dockerfile), pushes to `vcr.vercel.com`, and routes traffic to the
+container on Fluid compute.
+
+## WebSockets on Fluid
+
+- A container is one long-running Bandit process, so a **single instance serves
+  all WebSocket connections** — Fluid's per-connection pinning is automatic.
+- WSS works with no extra config; derive the URL client-side from `location`
+  (`wss:` under HTTPS).
+- A held-open socket is a long-running in-flight request, so the instance stays
+  **provisioned** (memory billed) for the life of the connection. When the last
+  socket closes and no requests are in flight, the instance **pauses** → $0.
+
+## Cost model
+
+Billing dimensions (Fluid):
+
+- **Active CPU** — billed *only while code executes* (paused during I/O / idle).
+  A 1 s metrics tick is ~negligible CPU.
+- **Provisioned Memory** — GB-hours for the *entire instance lifetime*, including
+  while idle holding a connection. **This dominates** for a persistent socket.
+- **Invocations** — one per connection; negligible.
+
+Key facts:
+
+- **2 GB is the floor on Pro** (Standard 2 GB / 1 vCPU, or Performance 4 GB /
+  2 vCPU). `vercel.json` `memory` is rejected; the dashboard offers only those
+  two tiers. Hobby is also 2 GB.
+- `iad1` rates: **$0.128 / CPU-hr**, **$0.0106 / GB-hr**.
+- So the real cost lever is **connection-time, not size**. Idle = $0; one viewer
+  connected 24/7 ≈ $15/mo (mostly memory), covered by Pro's $20 credit.
+- **Client lever:** close the WebSocket on `visibilitychange` when the tab is
+  hidden, reopen on return. A backgrounded tab then stops holding the instance
+  alive instead of billing 24/7.
+
+In this deploy, `:memsup`/`:cpu_sup` reported the instance's *own* allocation
+(2 GB, 1 vCPU; `System.schedulers_online/0` = 1), not the underlying host.
+
+## Deploy
+
+```sh
+# one-time: create + link the project (picks the team scope)
+vercel link --yes --project <name>
+
+# framework is declared in vercel.json (see above); then:
+vercel deploy --prod --yes --scope <team>
+```
+
+Fluid compute must be enabled (default for new projects). Use a recent CLI; if a
+newer CLI reports "Not authorized" against a cached session, pass `--token`
+explicitly.
+
+## Verifying
+
+- **Local:** `docker build -f Dockerfile.vercel -t app .` then
+  `docker run -e PORT=8080 -p 8080:8080 app`; curl `/healthz`; drive the page in
+  a browser to confirm the socket streams.
+- The app **reporting its own cgroup memory** is a convenient oracle — it shows
+  the real provisioned size and proves you're reading the container, not the Mac.
+- After deploy, confirm it's a container (not static): the alias serves the app
+  (200) instead of 404, and the project framework reads `container`.
