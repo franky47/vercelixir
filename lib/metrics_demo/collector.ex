@@ -1,31 +1,33 @@
 defmodule MetricsDemo.Collector do
   @moduledoc """
-  Samples metrics once per second and broadcasts the encoded payload to every
-  subscribed socket via a `:pg` process group.
+  Samples metrics once per second and broadcasts the snapshot to every
+  subscribed LiveView over `Phoenix.PubSub`.
 
   Centralising the cadence keeps `:cpu_sup.util/0` accurate (it reports usage
-  since its previous call) and encodes each sample only once, regardless of how
-  many clients are connected.
+  since its previous call) and samples once per tick regardless of how many
+  clients are connected.
   """
 
   use GenServer
 
-  @scope MetricsDemo.PG
-  @group :metrics
+  alias Phoenix.PubSub
+
+  @pubsub MetricsDemo.PubSub
+  @topic "metrics"
   @interval 1_000
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc "Subscribe the calling process to broadcasts of `{:metrics, json}`."
-  @spec subscribe() :: :ok
+  @doc "Subscribe the calling process to `{:metrics, map}` broadcasts."
+  @spec subscribe() :: :ok | {:error, term()}
   def subscribe do
-    :pg.join(@scope, @group, self())
+    PubSub.subscribe(@pubsub, @topic)
   end
 
-  @doc "Return the most recently sampled payload as a JSON string."
-  @spec latest() :: String.t()
+  @doc "Return the most recently sampled snapshot."
+  @spec latest() :: map()
   def latest do
     GenServer.call(__MODULE__, :latest)
   end
@@ -33,7 +35,7 @@ defmodule MetricsDemo.Collector do
   @impl true
   def init(_opts) do
     schedule()
-    {:ok, %{latest: sample()}}
+    {:ok, %{latest: MetricsDemo.Metrics.collect()}}
   end
 
   @impl true
@@ -44,19 +46,9 @@ defmodule MetricsDemo.Collector do
   @impl true
   def handle_info(:sample, _state) do
     schedule()
-    payload = sample()
-    broadcast(payload)
-    {:noreply, %{latest: payload}}
-  end
-
-  defp sample do
-    MetricsDemo.Metrics.collect() |> Jason.encode!()
-  end
-
-  defp broadcast(payload) do
-    for pid <- :pg.get_members(@scope, @group) do
-      send(pid, {:metrics, payload})
-    end
+    metrics = MetricsDemo.Metrics.collect()
+    PubSub.broadcast(@pubsub, @topic, {:metrics, metrics})
+    {:noreply, %{latest: metrics}}
   end
 
   defp schedule do

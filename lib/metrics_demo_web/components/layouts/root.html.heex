@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content={get_csrf_token()} />
+    <title>Elixir · Live System Metrics</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 76 65'%3E%3Cpath fill='%23fff' d='M37.59.25l36.95 64H.64l36.95-64z'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #000000;
+        --card: #0a0a0a;
+        --card-hover: #0f0f0f;
+        --border: rgba(255, 255, 255, 0.1);
+        --border-strong: rgba(255, 255, 255, 0.16);
+        --fg: #ededed;
+        --gray: #a1a1a1;
+        --muted: #8f8f8f;
+        --faint: #6b6b6b;
+        --blue: #0070f3;
+        --blue-light: #47a8ff;
+        --teal: #00b8a3;
+        --green: #00ca51;
+        --red: #ff5c5c;
+        --amber: #f5a623;
+        --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 24px 64px; }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 32px;
+      }
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .logo {
+        width: 32px; height: 32px;
+        display: grid; place-items: center;
+        color: var(--fg);
+      }
+      .logo svg { width: 26px; height: 26px; }
+      h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+      .sub { color: var(--muted); font-size: 13px; margin-top: 3px; font-family: var(--mono); }
+
+      .status {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--gray);
+        font-family: var(--mono);
+        background: var(--card); border: 1px solid var(--border);
+        padding: 7px 13px; border-radius: 9999px;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); transition: background .15s, box-shadow .15s; }
+      .status-text::after { content: "connecting…"; }
+
+      /* LiveView toggles phx-connected / phx-loading / phx-error on its container;
+         the `paused` class on <html> is set client-side when the tab is hidden. */
+      .phx-connected .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(0, 202, 81, 0.15); }
+      .phx-connected .status-text::after { content: "live"; }
+      .phx-error .dot { background: var(--red); box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.15); }
+      .phx-error .status-text::after { content: "disconnected"; }
+      html.paused .dot { background: var(--amber); box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.15); }
+      html.paused .status-text::after { content: "paused · tab hidden"; }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        transition: border-color .15s, background .15s;
+      }
+      .card:hover { border-color: var(--border-strong); background: var(--card-hover); }
+      .card .label {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+        color: var(--muted); margin-bottom: 14px; font-weight: 500;
+      }
+      .value { font-family: var(--mono); font-size: 32px; font-weight: 500; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+      .value .unit { font-size: 15px; color: var(--muted); margin-left: 3px; }
+      .meta { color: var(--muted); font-size: 12px; margin-top: 10px; font-family: var(--mono); }
+
+      .bar { height: 6px; border-radius: 9999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 14px; }
+      .bar > span { display: block; height: 100%; width: 0%; border-radius: 9999px;
+        background: linear-gradient(90deg, var(--blue), var(--teal)); transition: width .4s ease; }
+
+      canvas { width: 100%; height: 52px; display: block; margin-top: 14px; }
+      .span-2 { grid-column: span 2; }
+      @media (max-width: 560px) { .span-2 { grid-column: span 1; } }
+
+      footer { color: var(--faint); font-size: 12px; margin-top: 32px; text-align: center; font-family: var(--mono); }
+      footer code { color: var(--blue-light); }
+    </style>
+    <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
+    </script>
+  </head>
+  <body>
+    {@inner_content}
+  </body>
+</html>
