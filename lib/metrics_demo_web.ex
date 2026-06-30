@@ -51,8 +51,6 @@ defmodule MetricsDemoWeb do
     quote do
       import Phoenix.HTML
 
-      alias Phoenix.LiveView.JS
-
       unquote(verified_routes())
     end
   end

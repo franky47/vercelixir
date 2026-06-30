@@ -1,6 +1,6 @@
 defmodule MetricsDemo.Metrics do
   @moduledoc """
-  Snapshots host and BEAM runtime metrics into a JSON-serializable map.
+  Snapshots host and BEAM runtime metrics into a map.
 
   Host CPU and memory figures come from `:os_mon` (`:cpu_sup`/`:memsup`),
   which is only meaningful when sampled from a single process. The

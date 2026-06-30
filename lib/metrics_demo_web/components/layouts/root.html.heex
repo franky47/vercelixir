@@ -74,8 +74,9 @@
       .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); transition: background .15s, box-shadow .15s; }
       .status-text::after { content: "connecting…"; }
 
-      /* LiveView toggles phx-connected / phx-loading / phx-error on its container;
-         the `paused` class on <html> is set client-side when the tab is hidden. */
+      /* LiveView toggles phx-connected / phx-error on its container (the default
+         "connecting…" copy below covers the unstyled phx-loading state); the
+         `paused` class on <html> is set client-side when the tab is hidden. */
       .phx-connected .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(0, 202, 81, 0.15); }
       .phx-connected .status-text::after { content: "live"; }
       .phx-error .dot { background: var(--red); box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.15); }

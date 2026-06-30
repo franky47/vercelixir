@@ -35,20 +35,20 @@ defmodule MetricsDemo.Collector do
   @impl true
   def init(_opts) do
     schedule()
-    {:ok, %{latest: MetricsDemo.Metrics.collect()}}
+    {:ok, MetricsDemo.Metrics.collect()}
   end
 
   @impl true
-  def handle_call(:latest, _from, state) do
-    {:reply, state.latest, state}
+  def handle_call(:latest, _from, metrics) do
+    {:reply, metrics, metrics}
   end
 
   @impl true
   def handle_info(:sample, _state) do
     schedule()
     metrics = MetricsDemo.Metrics.collect()
-    PubSub.broadcast(@pubsub, @topic, {:metrics, metrics})
-    {:noreply, %{latest: metrics}}
+    :ok = PubSub.broadcast(@pubsub, @topic, {:metrics, metrics})
+    {:noreply, metrics}
   end
 
   defp schedule do

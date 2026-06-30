@@ -43,11 +43,16 @@ const Spark = {
     const x = (i) => i * step
     const start = HISTORY - data.length
 
-    ctx.beginPath()
-    data.forEach((v, i) => {
-      const px = x(start + i), py = y(v)
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-    })
+    const traceLine = () => {
+      ctx.beginPath()
+      data.forEach((v, i) => {
+        const px = x(start + i), py = y(v)
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      })
+    }
+
+    traceLine()
     ctx.lineTo(x(HISTORY - 1), h)
     ctx.lineTo(x(start), h)
     ctx.closePath()
@@ -57,11 +62,7 @@ const Spark = {
     ctx.fillStyle = grad
     ctx.fill()
 
-    ctx.beginPath()
-    data.forEach((v, i) => {
-      const px = x(start + i), py = y(v)
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-    })
+    traceLine()
     ctx.strokeStyle = color
     ctx.lineWidth = 1.75
     ctx.lineJoin = "round"
@@ -79,7 +80,8 @@ window.liveSocket = liveSocket
 
 // Cost control: hold the socket open only while the tab is visible so the Vercel
 // instance can pause (provisioned memory is billed only while a connection is
-// open). This also makes the initial connect, based on the load-time state.
+// open). Calling applyVisibility() on load also performs the initial connect,
+// gated on whether the tab is visible at load time.
 function applyVisibility() {
   const root = document.documentElement
   if (document.hidden) {
