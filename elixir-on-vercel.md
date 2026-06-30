@@ -18,19 +18,37 @@ run on **Fluid compute**.
 
 ## The app
 
-- **Bandit** as the HTTP/WebSocket server, **WebSockAdapter** + **WebSock** for
-  the socket, **Plug.Router** for routing, **Jason** for encoding.
+- **Phoenix LiveView** on a **Bandit**-backed `Phoenix.Endpoint`. `DashboardLive`
+  serves `/`, subscribes to the collector, and re-renders each tick; updates ride
+  the LiveView socket, so there is no hand-rolled `/ws`. **Jason** for encoding.
 - **`:os_mon`** (`:cpu_sup`, `:memsup`) for host CPU/memory — it's part of OTP,
   so just add `:os_mon` to `extra_applications`. Disable `disksup`/`os_sup` and
   raise `system_memory_high_watermark` to avoid alarm log noise.
 - One **`Collector` GenServer** samples once per second and broadcasts the
-  encoded payload to sockets via a `:pg` group. Centralising the cadence matters:
+  snapshot **map** over **`Phoenix.PubSub`**. Centralising the cadence matters:
   `:cpu_sup.util/0` reports usage *since its previous call*, so it's only
-  meaningful from a single caller — and you encode each sample once regardless of
+  meaningful from a single caller — and you sample once per tick regardless of
   client count.
 - Read the port from `$PORT` in `config/runtime.exs`; bind `ip: {0,0,0,0}`.
-- WebSocket leaks aren't a concern: `:pg` monitors joined pids and reaps them on
-  exit, so closed sockets clean themselves up.
+- Socket leaks aren't a concern: PubSub monitors subscriber pids and reaps them
+  on exit, so closed LiveViews clean themselves up.
+
+## LiveView specifics (the things that bite)
+
+- **Assets need a build step.** LiveView's client JS (`phoenix`,
+  `phoenix_live_view`) must reach the browser, or the page renders dead and never
+  updates. `esbuild` bundles `assets/js/app.js`; the Dockerfile runs
+  `mix assets.deploy` (esbuild `--minify` + `phx.digest`) before `mix release`,
+  and the digested output ships inside the release's `priv/static`.
+- **`secret_key_base` is required** to sign the session/LiveView. Prod reads
+  `SECRET_KEY_BASE`, falling back to a per-boot random value — fine for a
+  single-instance demo (a restart just forces clients to remount), but set the
+  env var for anything real.
+- **`check_origin: false`.** Vercel serves under a dynamic host, so origin
+  checking on the LiveView socket is disabled. Lock it to your domain in prod.
+- A LiveView socket is still **one long-running connection per viewer**, so the
+  Fluid cost model below is unchanged. The client drops the socket on
+  `visibilitychange` (hidden tab) to let the instance pause.
 
 ## Dockerfile.vercel
 

@@ -9,3 +9,7 @@ metrics_demo-*.tar
 /tmp/
 .elixir_ls/
 .vercel
+
+# Assets built by esbuild + phx.digest (regenerated on every build).
+/priv/static/assets/
+/priv/static/cache_manifest.json

@@ -1,9 +1,9 @@
-# Elixir Live System Metrics — WebSocket on Vercel
+# Elixir Live System Metrics — Phoenix LiveView on Vercel
 
-A minimal demo that streams host and BEAM metrics over a WebSocket once per
-second, rendered in a static dashboard. It runs as a single OTP release deployed
-to Vercel via a Dockerfile, using Vercel's [Dockerfile deployments][docker] and
-[WebSocket support][ws] — both of which run on Fluid compute.
+A minimal demo that streams host and BEAM metrics to a Phoenix LiveView dashboard
+once per second. It runs as a single OTP release deployed to Vercel via a
+Dockerfile, using Vercel's [Dockerfile deployments][docker] and
+[WebSocket support][ws] (LiveView's socket) — both of which run on Fluid compute.
 
 [docker]: https://vercel.com/blog/dockerfile-on-vercel
 [ws]: https://vercel.com/changelog/websocket-support-is-now-in-public-beta
@@ -12,17 +12,16 @@ to Vercel via a Dockerfile, using Vercel's [Dockerfile deployments][docker] and
 
 ## How it works
 
-- **`MetricsDemo.Collector`** samples once per second and broadcasts the encoded
-  payload to every subscriber through a `:pg` process group. Sampling from a
-  single process keeps `:cpu_sup.util/0` accurate and encodes each snapshot once,
-  regardless of client count.
-- **`MetricsDemo.MetricsSocket`** is a `WebSock` handler. It pushes the latest
-  sample on connect, then relays each broadcast.
-- **`MetricsDemo.Router`** serves the dashboard and upgrades `/ws`. Bandit is the
-  HTTP/WebSocket server.
-- **`priv/static/index.html`** is a dependency-free dashboard that reconnects with
-  backoff and derives the WebSocket URL from `location` (so `wss://` in
-  production, `ws://` locally).
+- **`MetricsDemo.Collector`** samples once per second and broadcasts the snapshot
+  to every subscriber through `Phoenix.PubSub`. Sampling from a single process
+  keeps `:cpu_sup.util/0` accurate and samples once per tick, regardless of client
+  count.
+- **`MetricsDemoWeb.DashboardLive`** is the LiveView at `/`. It subscribes to the
+  collector on connect and re-renders each tick; updates reach the browser over
+  the LiveView socket. Bandit backs the `Phoenix.Endpoint`.
+- **`assets/js/app.js`** wires the `LiveSocket`, draws the sparklines via a canvas
+  hook, and drops the socket while the tab is hidden (cost control). It's bundled
+  by `esbuild` and digested into the release at build time.
 
 Metrics: CPU utilization, load average, system memory, BEAM process count, BEAM
 memory, and uptime.
@@ -35,7 +34,7 @@ memory, and uptime.
 ## Run locally
 
 ```sh
-mix deps.get
+mix setup        # deps.get + esbuild install
 mix run --no-halt
 # open http://localhost:4000
 ```
