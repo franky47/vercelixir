@@ -7,7 +7,7 @@ defmodule MetricsDemoWeb do
   and so on.
   """
 
-  def static_paths, do: ~w(assets robots.txt)
+  def static_paths, do: ~w(assets favicon.ico robots.txt)
 
   def router do
     quote do
